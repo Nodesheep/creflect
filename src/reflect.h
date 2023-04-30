@@ -1,21 +1,18 @@
-//
-//  reflect.hpp
-//  reflect1
-//
-//  Created by yangerjun on 2023/4/28.
-//
+#ifndef CREFLECT_REFLECT_H
+#define CREFLECT_REFLECT_H
 
 #include "regist.h"
 #include "base.h"
 #include <memory>
 #include <vector>
 
-#ifndef reflect_h
-#define reflect_h
-
 #define RFClassBegin(clazz) class clazz : public RFObjectClass { \
 public:\
-static inline Register::InitialRegister<clazz> r;
+static inline Register::InitialRegister<clazz> r;\
+virtual const char* Clazz() override{ \
+    static char* clazz = abi::__cxa_demangle(typeid(*this).name(),0,0,0);\
+    return clazz;\
+}
 
 #define RFClassEnd(clazz) };
 
@@ -39,4 +36,4 @@ std::shared_ptr<type> name; \
 Register::FieldInfoRegister __##name = Register::FieldInfoRegister(this, &this->name, this->Clazz(), #type, #name);
 
 
-#endif /* reflect_hpp */
+#endif

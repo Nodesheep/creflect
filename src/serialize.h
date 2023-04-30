@@ -1,14 +1,6 @@
-//
-//  serialize.hpp
-//  reflect1
-//
-//  Created by yangerjun on 2023/4/28.
-//
+#ifndef CREFLECT_SERIALIZE_H
+#define CREFLECT_SERIALIZE_H
 
-#ifndef serialize_hpp
-#define serialize_hpp
-
-#include <stdio.h>
 #include <string>
 #include <vector>
 #include <stdlib.h>
@@ -17,7 +9,7 @@
 #include "metainfo.h"
 #include "base.h"
 
-#define GET_TYPE_NAME(type) abi::__cxa_demangle(typeid(type).name(),0,0,0)
+#define GET_TYPE_NAME(type) abi::__cxa_demangle(typeid(type).name(),0,0,0);
 
 enum SerialState {
     KEY,
@@ -30,35 +22,29 @@ enum SerialState {
 };
 
 class Serializer {
+private:
+    static int intFromStr(const std::string& str) {
+        return std::stoi(str);
+    }
+    
+    static double doubleFromStr(const std::string& str) {
+        return std::stod(str);
+    }
+    
+    static bool boolFromStr(const std::string& str) {
+        return std::stoi(str);
+    }
+    
 public:
     template<typename T>
-    static void* obj_from_json(const std::string& json) {
-        std::string clazz = "";
-        T* obj = new T();
-        RFClassInfo::Deserializers[clazz](obj, json);
-    }
-    
-    static int int_from_json(const std::string& json) {
-        return std::stoi(json);
-    }
-    
-    static double double_from_json(const std::string& json) {
-        return std::stod(json);
-    }
-    
-    static bool bool_from_json(const std::string& json) {
-        return std::stoi(json);
-    }
-
-    template<typename T>
     static std::string Serialize(T *obj) {
-        std::string clazz = GET_TYPE_NAME(*obj);
+        const char* clazz = ((RFObjectClass*)obj)->Clazz();
         return Serialize(obj, clazz);
     }
     
     static std::string Serialize(void *obj, const std::string& clazz) {
         std::string json = "{";
-        std::unordered_map<std::string, std::tuple<std::string, int>> map = RFClassInfo::ClassMetaInfo[clazz];
+        std::unordered_map<std::string, std::tuple<std::string, int>>& map = RFClassInfo::ClassMetaInfo[clazz];
         for(std::unordered_map<std::string, std::tuple<std::string, int>>::iterator it = map.begin(); it != map.end(); ++it) {
             std::string field_name = it->first;
             std::string field_type = std::get<0>(it->second);
@@ -133,7 +119,7 @@ public:
 
     template<typename T>
     static void Deserialize(T *obj, const std::string& json) {
-        std::string clazz = GET_TYPE_NAME(*obj);
+        const char* clazz = ((RFObjectClass*)obj)->Clazz();
         std::unordered_map<std::string, std::string> kvs;
         Decode(json, kvs);
         for(auto kv : kvs) {
@@ -142,11 +128,11 @@ public:
             std::string field_type = RFClassInfo::FieldType(clazz, field_name);
             void* field_address = RFClassInfo::FieldAddress(obj ,clazz, field_name);
             if(field_type == "int") {
-                *(int*)field_address = int_from_json(field_value);
+                *(int*)field_address = intFromStr(field_value);
             }else if(field_type == "double") {
-                *(double*)field_address = double_from_json(field_value);
+                *(double*)field_address = doubleFromStr(field_value);
             }else if(field_type == "bool") {
-                *(bool*)field_address = bool_from_json(field_value);
+                *(bool*)field_address = boolFromStr(field_value);
             }else if(field_type == "std::string") {
                 *(std::string*)field_address = field_value;
             }else if(field_type.find("RFArrayClass") == 0) {
@@ -176,15 +162,15 @@ public:
         
         if(elemtype == "int") {
             for(auto elem : elems) {
-                (*(RFArrayClass<int>*)address).Data.push_back(std::make_shared<int>(int_from_json(elem)));
+                (*(RFArrayClass<int>*)address).Data.push_back(std::make_shared<int>(intFromStr(elem)));
             }
         }else if(elemtype == "double") {
             for(auto elem : elems) {
-                (*(RFArrayClass<double>*)address).Data.push_back(std::make_shared<double>(double_from_json(elem)));
+                (*(RFArrayClass<double>*)address).Data.push_back(std::make_shared<double>(doubleFromStr(elem)));
             }
         }else if(elemtype == "bool") {
             for(auto elem : elems) {
-                (*(RFArrayClass<bool>*)address).Data.push_back(std::make_shared<bool>(bool_from_json(elem)));
+                (*(RFArrayClass<bool>*)address).Data.push_back(std::make_shared<bool>(boolFromStr(elem)));
             }
         }else if(elemtype == "std::string") {
             for(auto elem : elems) {
@@ -196,7 +182,6 @@ public:
     }
     
     static void Decode(const std::string& json, std::unordered_map<std::string, std::string>& kvs) {
-        std::cout << "kkkkk" << json << std::endl;
         SerialState state = KEY;
         size_t len = json.size();
         std::string key = "";
@@ -204,7 +189,7 @@ public:
         int brace_count = 0, bracket_count = 0;
         for(int i = 0; i < len; ++i) {
             char c = json[i];
-            if(c == ' ') {
+            if(c == ' ' || c == '\r' || c == '\t') {
                 continue;
             }
             if(state == KEY) {
@@ -248,24 +233,22 @@ public:
             }else if(state == VALUE_NUMBER) {
                 if(c == ',' || c == '}') {
                     state = VALUE_END;
-                    if(c == '}') {
-                        kvs[key] = value;
-                        key.clear();
-                        value.clear();
-                    }
                 }else {
                     value.push_back(c);
                 }
                 
             }else if(state == VALUE_END) {
                 kvs[key] = value;
-                std::cout << "xxx" << key << "xxx" << value << std::endl;
                 key.clear();
                 value.clear();
                 state = KEY;
             }
         }
+        
+        if(key.size() != 0 && value.size() != 0) {
+            kvs[key] = value;
+        }
     }
 };
 
-#endif /* serialize_hpp */
+#endif
